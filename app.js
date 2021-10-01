@@ -1,25 +1,22 @@
 const express = require('express');
 const app = express();
 const fs = require('fs');
-
 const multer = require('multer');
-
-
-
 const {google} = require('googleapis');
 const { oauth2 } = require('googleapis/build/src/apis/oauth2');
 const OAuth2 = require('./credentials.json');
-
 const CLIENT_ID = OAuth2.web.client_id;
 const CLIENT_SCERET = OAuth2.web.client_secret;
 const REDIRECT_URI =OAuth2.web.redirect_uris[0];
 
+//object to pass client ID, ClieNt secret and redirect URI
 const OAuth2Client = new google.auth.OAuth2(
     CLIENT_ID,
     CLIENT_SCERET,
     REDIRECT_URI
 );
 
+//value = false, because currently we will assum that the user is not authenticated
 var authed = false;
 
 var name, pic;
@@ -35,17 +32,17 @@ var Storage = multer.diskStorage({
   
   var upload = multer({
     storage: Storage,
-  }).single("file");
+  }).single("file"); 
 
-const SCOPES =
-  "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile";
-
+//what kind information we need to access from google API
+const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile";
 
 app.set('view engine', 'ejs');
 
 app.get('/', (req, res) => {
+    //if the user is not authenticated, then this block of code will execute
     if(!authed){
-
+        //In here generate the oauth URL and redirect to there
         var url = OAuth2Client.generateAuthUrl({
             access_type : 'offline',
             scope : SCOPES
@@ -53,14 +50,15 @@ app.get('/', (req, res) => {
         console.log(url);
         res.render("index", {url:url})
 
-    }else{
+    }
+    //execute the code when the user is authenitcated
+    else {
         var Oauth2 = google.oauth2({
             auth: OAuth2Client,
             version: 'v2'
         })
 
         //user information
-        
         Oauth2.userinfo.get(function(err, response){
             if(err) throw err
             console.log(response.data)
@@ -115,9 +113,12 @@ app.get('/logout',(req,res) => {
 })
 
 app.get('/google/callback', (req, res) => {
+    //store the autherization code inside the code variable
     const code = req.query.code;
+
+    //if any sort of code available in there (code) then get the access token
     if(code){
-        //get access code
+        //get the autharization code and access token
         OAuth2Client.getToken(code, function(err, token) {
             if(err){
                 console.log('Error in Authentication');
@@ -128,6 +129,8 @@ app.get('/google/callback', (req, res) => {
                 OAuth2Client.setCredentials(token);
                 
                 authed = true;
+
+                //redirect user back to the home page
                 res.redirect('/');
             }
         })
