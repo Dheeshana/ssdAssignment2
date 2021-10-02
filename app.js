@@ -16,6 +16,8 @@ const OAuth2Client = new google.auth.OAuth2(
     REDIRECT_URI
 );
 
+
+
 //value = false, because currently we will assum that the user is not authenticated
 var authed = false;
 
@@ -51,7 +53,7 @@ app.get('/', (req, res) => {
         res.render("index", {url:url})
 
     }
-    //execute the code when the user is authenitcated
+    //execute the code when the user is authenticated
     else {
         var Oauth2 = google.oauth2({
             auth: OAuth2Client,
