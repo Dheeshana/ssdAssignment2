@@ -3,7 +3,7 @@ const app = express();
 const fs = require('fs');
 const multer = require('multer');
 const {google} = require('googleapis');
-const { oauth2 } = require('googleapis/build/src/apis/oauth2');
+//const { oauth2 } = require('googleapis/build/src/apis/oauth2');
 const OAuth2 = require('./credentials.json');
 const CLIENT_ID = OAuth2.web.client_id;
 const CLIENT_SCERET = OAuth2.web.client_secret;
@@ -41,6 +41,19 @@ const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapi
 
 app.set('view engine', 'ejs');
 
+var Storage = multer.diskStorage({
+  destination: function (req, file, callback) {
+    callback(null, "./images");
+  },
+  filename: function (req, file, callback) {
+    callback(null, file.fieldname + "_" + Date.now() + "_" + file.originalname);
+  },
+});
+
+var upload = multer({
+  storage: Storage,
+}).single("file");
+
 app.get('/', (req, res) => {
     //if the user is not authenticated, then this block of code will execute
     if(!authed){
@@ -70,6 +83,35 @@ app.get('/', (req, res) => {
             res.render('success', {name:name, pic:pic, success: false});
         })
     }
+})
+
+app.get('/userinfo', (req, res) => {
+  if(!authed){
+
+    var url = OAuth2Client.generateAuthUrl({
+        access_type : 'offline',
+        scope : SCOPES
+    })
+    console.log(url);
+    res.render("userinfo", {url:url})
+
+}else{
+    var Oauth2 = google.oauth2({
+        auth: OAuth2Client,
+        version: 'v2'
+    })
+
+    //user information
+    
+    Oauth2.userinfo.get(function(err, response){
+        if(err) throw err
+        console.log(response.data)
+
+        name = response.data.name;
+        pic = response.data.picture;
+        res.render('userinfo', {name:name, pic:pic, success: false});
+    })
+}
 })
 
 
@@ -110,8 +152,8 @@ app.post("/upload", (req, res) => {
 });
 
 app.get('/logout',(req,res) => {
-    authed = false;
-    res.redirect('/')
+  authed = false
+  res.redirect('/')
 })
 
 app.get('/google/callback', (req, res) => {
