@@ -3,6 +3,11 @@ const app = express();
 const fs = require('fs');
 const multer = require('multer');
 const {google} = require('googleapis');
+const passport = require('passport')
+const facebookStrategy = require('passport-facebook').Strategy
+const session = require('express-session')
+const User = require('./models/User')
+
 //const { oauth2 } = require('googleapis/build/src/apis/oauth2');
 const OAuth2 = require('./credentials.json');
 const CLIENT_ID = OAuth2.web.client_id;
@@ -40,6 +45,74 @@ var Storage = multer.diskStorage({
 const SCOPES = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile";
 
 app.set('view engine', 'ejs');
+app.use(session({ secret: 'secret key' }));
+app.use(passport.initialize());
+    app.use(passport.session()); 
+
+    passport.use(new facebookStrategy({
+
+      // pull in our app id and secret from our auth.js file
+      clientID        : "239988848084194",
+      clientSecret    : "033cfc3ef06dfd1b96115d787383a3ac",
+      callbackURL     : "http://localhost:5000/facebook/callback",
+      profileFields: ['id', 'displayName', 'name', 'gender', 'picture.type(large)','email']
+  
+  },// api returns
+  function(token, refreshToken, profile, done) {
+  
+      // asynchronous
+      process.nextTick(function() {
+  
+          // check whether if the user exist or not
+          User.findOne({ 'uid' : profile.id }, function(err, user) {
+  
+              //if user not found display error message
+              if (err)
+                  return done(err);
+  
+              // if user is found, then log them in
+              if (user) {
+                  console.log("user found")
+                  console.log(user)
+                  return done(null, user);
+              } else {
+                  // if there is no user found with that facebook id, create them
+                  var newUser            = new User();
+  
+                  // set all of the facebook information in our user model
+                  newUser.uid    = profile.id; // set the users facebook id                   
+                  newUser.token = token; // we will save the token that facebook provides to the user                    
+                  newUser.name  = profile.name.givenName + ' ' + profile.name.familyName; // look at the passport user profile to see how names are returned
+                  newUser.email = profile.emails[0].value; // facebook can return multiple emails so we'll take the first
+                  newUser.gender = profile.gender
+                  newUser.pic = profile.photos[0].value
+                  // save our user to the database
+                  newUser.save(function(err) {
+                      if (err)
+                          throw err;
+  
+                      // if successful, return the new user
+                      return done(null, newUser);
+                  });
+              }
+  
+          });
+  
+      })
+  
+  }));
+  
+  passport.serializeUser(function(user, done) {
+      done(null, user.id);
+  });
+  
+  // deserialize the user
+  passport.deserializeUser(function(id, done) {
+      User.findById(id, function(err, user) {
+          done(err, user);
+      });
+  });
+      
 
 var Storage = multer.diskStorage({
   destination: function (req, file, callback) {
@@ -84,6 +157,14 @@ app.get('/', (req, res) => {
         })
     }
 })
+
+//check user logged in or not
+app.get('/profile', isLoggedIn, function(req, res) {
+  console.log(req.user)
+  res.render('profile', {
+      user : req.user
+  });
+});
 
 app.get('/userinfo', (req, res) => {
   if(!authed){
@@ -151,10 +232,37 @@ app.post("/upload", (req, res) => {
     });
 });
 
-app.get('/logout',(req,res) => {
+//facebook logout
+app.get('/logout', function(req, res) {
+  req.logout();
+  res.redirect('/');
+});
+
+//google account logout
+app.get('/google/logout',(req,res) => {
   authed = false
   res.redirect('/')
 })
+
+function isLoggedIn(req, res, next) {
+
+	// if user is authenticated
+	if (req.isAuthenticated())
+		return next();
+
+	// return to homepage
+	res.redirect('/');
+}
+
+
+//when click button excute the get request
+//pass email
+app.get('/auth/facebook', passport.authenticate('facebook', { scope : 'email' }));
+app.get('/facebook/callback',
+		passport.authenticate('facebook', {
+			successRedirect : '/profile',
+			failureRedirect : '/'
+		}));
 
 app.get('/google/callback', (req, res) => {
     //store the autherization code inside the code variable
